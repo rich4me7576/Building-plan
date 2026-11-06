@@ -1,0 +1,8 @@
+{
+  "name": "Building Plan - Architectural Blueprint & Floor Planner",
+  "description": "Professional 2D and 3D architectural floor planner and building blueprint design studio with wall drawing, room zoning, furniture layout, cost estimation, and CAD export.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
