@@ -1,8 +1,6 @@
 {
-  "name": "Building Plan - Architectural Blueprint & Floor Planner",
-  "description": "Professional 2D and 3D architectural floor planner and building blueprint design studio with wall drawing, room zoning, furniture layout, cost estimation, and CAD export.",
-  "permissions": [],
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "name": "BQ-CAD // 2-Bedroom Boys' Quarters Site Working Drawings",
+  "description": "Site-ready architectural, structural, plumbing, and electrical construction drawings with complete multi-tier setting-out dimensions, schedules, and material quantities for the 2-Bedroom Boys' Quarters (Nigeria).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
