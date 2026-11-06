@@ -29,6 +29,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Info,
+  Printer,
 } from 'lucide-react';
 import {
   CAMERA_PRESETS_3D,
@@ -52,6 +53,8 @@ interface Building3DViewerProps {
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string | null) => void;
   onSwitchTo2DSheet?: (sheetId: string) => void;
+  onOpenPrintModal?: (defaultScope?: '3d-views') => void;
+  onRegisterSnapshotGetter?: (getter: () => string | null) => void;
 }
 
 export const Building3DViewer: React.FC<Building3DViewerProps> = ({
@@ -59,6 +62,8 @@ export const Building3DViewer: React.FC<Building3DViewerProps> = ({
   selectedRoomId,
   onSelectRoom,
   onSwitchTo2DSheet,
+  onOpenPrintModal,
+  onRegisterSnapshotGetter,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -827,6 +832,20 @@ export const Building3DViewer: React.FC<Building3DViewerProps> = ({
     a.click();
   };
 
+  // Register snapshot getter for parent Print dialog
+  useEffect(() => {
+    if (!onRegisterSnapshotGetter) return;
+    const getter = () => {
+      const renderer = rendererRef.current;
+      const scene = sceneRef.current;
+      const cam = activeCameraRef.current;
+      if (!renderer || !scene || !cam) return null;
+      renderer.render(scene, cam);
+      return renderer.domElement.toDataURL('image/png');
+    };
+    onRegisterSnapshotGetter(getter);
+  }, [onRegisterSnapshotGetter]);
+
   // Export 3D BIM / Architectural Specification JSON
   const handleExportModelSpec = () => {
     const payload = {
@@ -997,6 +1016,15 @@ export const Building3DViewer: React.FC<Building3DViewerProps> = ({
           >
             <Camera className="w-3.5 h-3.5" />
             <span className="hidden lg:inline">Screenshot</span>
+          </button>
+
+          <button
+            onClick={() => onOpenPrintModal?.('3d-views')}
+            title="Print 3D Architectural Perspectives Plate"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40"
+          >
+            <Printer className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden lg:inline">Print 3D</span>
           </button>
 
           <button

@@ -32,9 +32,15 @@ import {
 } from './components/MepAndSchedulesSheet';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
 import { Building3DViewer } from './components/Building3DViewer';
+import { Perspective3DSheet } from './components/Perspective3DSheet';
+import {
+  PrintDrawingModal,
+  PrintExecutionOptions,
+} from './components/PrintDrawingModal';
 
 export type SheetId =
   | '3D-MODEL'
+  | 'A-301'
   | 'A-001'
   | 'A-000'
   | 'A-002'
@@ -48,6 +54,7 @@ export type SheetId =
 
 const SHEET_TABS: { id: SheetId; code: string; name: string; group: string }[] = [
   { id: '3D-MODEL', code: '3D BIM', name: 'Interactive 3D Model', group: '3D' },
+  { id: 'A-301', code: 'A-301', name: '3D Perspectives', group: '3D' },
   { id: 'A-001', code: 'A-001', name: 'Floor Plan', group: 'Arch' },
   { id: 'A-000', code: 'A-000', name: 'Setting-Out', group: 'Arch' },
   { id: 'A-002', code: 'A-002', name: 'Roof Plan', group: 'Roof' },
@@ -76,6 +83,13 @@ export default function App() {
   const [showPdfDrawer, setShowPdfDrawer] = useState<boolean>(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState<boolean>(false);
 
+  // Print Drawing Set Modal & Execution State
+  const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
+  const [printExecutionConfig, setPrintExecutionConfig] =
+    useState<PrintExecutionOptions | null>(null);
+  const [live3DSnapshotUrl, setLive3DSnapshotUrl] = useState<string | null>(null);
+  const snapshotGetterRef = React.useRef<(() => string | null) | null>(null);
+
   // Site Engineer Resolution Settings (Addresses all Page 9 preliminary conflicts)
   const [siteConfig, setSiteConfig] = useState<SiteResolutionConfig>({
     eastOverhangMode: 'add-column-c4',
@@ -92,6 +106,18 @@ export default function App() {
       root.classList.remove('dark');
     }
   }, [darkMode]);
+
+  // Clean up print classes and print mount state after printing completes
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      document.body.classList.remove('has-print-target');
+      setPrintExecutionConfig(null);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, []);
 
   const diagonals = useMemo(() => calculateSettingOutDiagonals(), []);
   const boqItems = useMemo(() => calculateSiteBOQ(siteConfig), [siteConfig]);
@@ -127,13 +153,110 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  const handlePrintDrawingSet = () => {
-    window.print();
+  const handleOpenPrintModal = (defaultScope?: '3d-views') => {
+    if (snapshotGetterRef.current) {
+      try {
+        const snap = snapshotGetterRef.current();
+        if (snap) setLive3DSnapshotUrl(snap);
+      } catch (err) {
+        console.warn('Snapshot capture warning:', err);
+      }
+    }
+    setShowPrintModal(true);
+  };
+
+  const handleExecutePrint = (options: PrintExecutionOptions) => {
+    setPrintExecutionConfig(options);
+    document.body.classList.add('has-print-target');
+
+    // Give React time to render the print mount DOM before launching print dialog
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  const renderSheetComponent = (sheetId: string) => {
+    switch (sheetId) {
+      case 'A-000':
+        return (
+          <FloorPlanSheet
+            key="A-000"
+            mode="A-000"
+            unit={unit}
+            config={siteConfig}
+            showMasonryChain={true}
+            showInternalChain={true}
+            showGridChain={true}
+            showFurniture={false}
+            selectedId={selectedElementId}
+            onSelectElement={setSelectedElementId}
+          />
+        );
+      case 'A-001':
+        return (
+          <FloorPlanSheet
+            key="A-001"
+            mode="A-001"
+            unit={unit}
+            config={siteConfig}
+            showMasonryChain={showMasonryChain}
+            showInternalChain={showInternalChain}
+            showGridChain={showGridChain}
+            showFurniture={showFurniture}
+            selectedId={selectedElementId}
+            onSelectElement={setSelectedElementId}
+          />
+        );
+      case 'A-002':
+        return <RoofPlanSheet key="A-002" unit={unit} config={siteConfig} />;
+      case 'A-003/006':
+        return (
+          <ElevationsSheet
+            key="A-003/006"
+            unit={unit}
+            config={siteConfig}
+            onSelectOpening={setSelectedElementId}
+          />
+        );
+      case 'A-008':
+        return <SectionBSheet key="A-008" unit={unit} config={siteConfig} />;
+      case 'S-001':
+        return <StructuralSheet key="S-001" unit={unit} config={siteConfig} />;
+      case 'P-001':
+        return <PlumbingSheet key="P-001" unit={unit} config={siteConfig} />;
+      case 'E-001':
+        return <ElectricalSheet key="E-001" unit={unit} config={siteConfig} />;
+      case 'Q-001':
+        return (
+          <SchedulesAndBoqSheet
+            key="Q-001"
+            unit={unit}
+            config={siteConfig}
+            boqItems={boqItems}
+            onExportCsv={handleExportCsv}
+          />
+        );
+      case '3D-PERSPECTIVES':
+      case 'A-301':
+        return (
+          <Perspective3DSheet
+            key="A-301"
+            unit={unit}
+            config={siteConfig}
+            selectedView={printExecutionConfig?.selected3DView || 'all'}
+            liveSnapshotDataUrl={live3DSnapshotUrl}
+            sheetCode="A-301"
+          />
+        );
+      default:
+        return null;
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#F6F5F0] dark:bg-slate-950 text-[#14181F] dark:text-slate-100 flex flex-col">
-      {/* ==================== TOP BAR CONTRACT (3 ZONES, SINGLE LINE) ==================== */}
+      <div id="screen-workspace" className="flex flex-col flex-1">
+        {/* ==================== TOP BAR CONTRACT (3 ZONES, SINGLE LINE) ==================== */}
       <header className="no-print flex items-center justify-between gap-8 px-6 py-3.5 border-b border-slate-300 dark:border-slate-800 bg-[#EFECE4] dark:bg-slate-900">
         {/* Zone 1: Brand Title (Single text element) */}
         <a
@@ -200,11 +323,11 @@ export default function App() {
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            onClick={handlePrintDrawingSet}
-            className="px-4 py-2 text-xs font-mono font-semibold text-white bg-slate-900 dark:bg-amber-500 dark:text-slate-950 rounded hover:opacity-90 transition-opacity flex items-center gap-2 whitespace-nowrap shrink-0"
+            onClick={() => handleOpenPrintModal()}
+            className="px-4 py-2 text-xs font-mono font-semibold text-white bg-slate-900 dark:bg-amber-500 dark:text-slate-950 rounded hover:opacity-90 transition-opacity flex items-center gap-2 whitespace-nowrap shrink-0 shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Print Construction Set</span>
+            <span>Print Drawings &amp; 3D Views</span>
           </button>
         </div>
       </header>
@@ -376,7 +499,7 @@ export default function App() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {activeSheet === '3D-MODEL' && (
+          {activeSheet === '3D-MODEL' ? (
             <div className="lg:col-span-12">
               <Building3DViewer
                 siteConfig={siteConfig}
@@ -385,125 +508,68 @@ export default function App() {
                   if (id) setSelectedElementId(id);
                 }}
                 onSwitchTo2DSheet={(sheet) => setActiveSheet(sheet as SheetId)}
+                onOpenPrintModal={handleOpenPrintModal}
+                onRegisterSnapshotGetter={(getter) => {
+                  snapshotGetterRef.current = getter;
+                }}
               />
             </div>
-          )}
-
-          {/* LEFT / CENTER: ARCHITECTURAL DRAWING SHEET CANVAS (9 Cols on Desktop) */}
-          <div className={`${activeSheet === '3D-MODEL' ? 'lg:col-span-9' : 'lg:col-span-9'} space-y-8`}>
-            {activeSheet === '3D-MODEL' && (
-              <FloorPlanSheet
-                mode="A-001"
-                unit={unit}
-                config={siteConfig}
-                showMasonryChain={showMasonryChain}
-                showInternalChain={showInternalChain}
-                showGridChain={showGridChain}
-                showFurniture={showFurniture}
-                selectedId={selectedElementId}
-                onSelectElement={setSelectedElementId}
-              />
-            )}
-
-            {activeSheet === 'A-001' && (
-              <FloorPlanSheet
-                mode="A-001"
-                unit={unit}
-                config={siteConfig}
-                showMasonryChain={showMasonryChain}
-                showInternalChain={showInternalChain}
-                showGridChain={showGridChain}
-                showFurniture={showFurniture}
-                selectedId={selectedElementId}
-                onSelectElement={setSelectedElementId}
-              />
-            )}
-
-            {activeSheet === 'A-000' && (
-              <FloorPlanSheet
-                mode="A-000"
-                unit={unit}
-                config={siteConfig}
-                showMasonryChain={showMasonryChain}
-                showInternalChain={showInternalChain}
-                showGridChain={showGridChain}
-                showFurniture={showFurniture}
-                selectedId={selectedElementId}
-                onSelectElement={setSelectedElementId}
-              />
-            )}
-
-            {activeSheet === 'A-002' && <RoofPlanSheet unit={unit} config={siteConfig} />}
-
-            {activeSheet === 'A-003/006' && (
-              <ElevationsSheet
-                unit={unit}
-                config={siteConfig}
-                onSelectOpening={setSelectedElementId}
-              />
-            )}
-
-            {activeSheet === 'A-008' && <SectionBSheet unit={unit} config={siteConfig} />}
-
-            {activeSheet === 'S-001' && <StructuralSheet unit={unit} config={siteConfig} />}
-
-            {activeSheet === 'P-001' && <PlumbingSheet unit={unit} config={siteConfig} />}
-
-            {activeSheet === 'E-001' && <ElectricalSheet unit={unit} config={siteConfig} />}
-
-            {activeSheet === 'Q-001' && (
-              <SchedulesAndBoqSheet
-                unit={unit}
-                config={siteConfig}
-                boqItems={boqItems}
-                onExportCsv={handleExportCsv}
-              />
-            )}
-
-            {/* COMPLETE MULTI-SHEET SITE PRINT PACK */}
-            {activeSheet === 'ALL-PACK' && (
-              <div className="space-y-10">
-                <FloorPlanSheet
-                  mode="A-001"
-                  unit={unit}
-                  config={siteConfig}
-                  showMasonryChain={showMasonryChain}
-                  showInternalChain={showInternalChain}
-                  showGridChain={showGridChain}
-                  showFurniture={showFurniture}
-                  selectedId={selectedElementId}
-                  onSelectElement={setSelectedElementId}
-                />
-                <FloorPlanSheet
-                  mode="A-000"
-                  unit={unit}
-                  config={siteConfig}
-                  showMasonryChain={true}
-                  showInternalChain={true}
-                  showGridChain={true}
-                  showFurniture={false}
-                  selectedId={selectedElementId}
-                  onSelectElement={setSelectedElementId}
-                />
-                <RoofPlanSheet unit={unit} config={siteConfig} />
-                <ElevationsSheet
-                  unit={unit}
-                  config={siteConfig}
-                  onSelectOpening={setSelectedElementId}
-                />
-                <SectionBSheet unit={unit} config={siteConfig} />
-                <StructuralSheet unit={unit} config={siteConfig} />
-                <PlumbingSheet unit={unit} config={siteConfig} />
-                <ElectricalSheet unit={unit} config={siteConfig} />
-                <SchedulesAndBoqSheet
-                  unit={unit}
-                  config={siteConfig}
-                  boqItems={boqItems}
-                  onExportCsv={handleExportCsv}
-                />
+          ) : (
+            <>
+              {/* LEFT / CENTER: ARCHITECTURAL DRAWING SHEET CANVAS (9 Cols on Desktop) */}
+              <div className="lg:col-span-9 space-y-8">
+                {activeSheet === 'ALL-PACK' ? (
+                  <div className="space-y-10">
+                    <FloorPlanSheet
+                      mode="A-001"
+                      unit={unit}
+                      config={siteConfig}
+                      showMasonryChain={showMasonryChain}
+                      showInternalChain={showInternalChain}
+                      showGridChain={showGridChain}
+                      showFurniture={showFurniture}
+                      selectedId={selectedElementId}
+                      onSelectElement={setSelectedElementId}
+                    />
+                    <FloorPlanSheet
+                      mode="A-000"
+                      unit={unit}
+                      config={siteConfig}
+                      showMasonryChain={true}
+                      showInternalChain={true}
+                      showGridChain={true}
+                      showFurniture={false}
+                      selectedId={selectedElementId}
+                      onSelectElement={setSelectedElementId}
+                    />
+                    <RoofPlanSheet unit={unit} config={siteConfig} />
+                    <ElevationsSheet
+                      unit={unit}
+                      config={siteConfig}
+                      onSelectOpening={setSelectedElementId}
+                    />
+                    <SectionBSheet unit={unit} config={siteConfig} />
+                    <StructuralSheet unit={unit} config={siteConfig} />
+                    <PlumbingSheet unit={unit} config={siteConfig} />
+                    <ElectricalSheet unit={unit} config={siteConfig} />
+                    <SchedulesAndBoqSheet
+                      unit={unit}
+                      config={siteConfig}
+                      boqItems={boqItems}
+                      onExportCsv={handleExportCsv}
+                    />
+                    <Perspective3DSheet
+                      unit={unit}
+                      config={siteConfig}
+                      selectedView="all"
+                      liveSnapshotDataUrl={live3DSnapshotUrl}
+                      sheetCode="A-301"
+                    />
+                  </div>
+                ) : (
+                  renderSheetComponent(activeSheet)
+                )}
               </div>
-            )}
-          </div>
 
           {/* RIGHT SIDEBAR: INTERACTIVE SITE INSPECTOR & ENGINEER RFI RESOLVER (3 Cols on Desktop) */}
           <aside className="no-print lg:col-span-3 space-y-5">
@@ -825,6 +891,8 @@ export default function App() {
               </dl>
             </div>
           </aside>
+        </>
+      )}
         </div>
       </main>
 
@@ -837,8 +905,24 @@ export default function App() {
         config={siteConfig}
         onPrintFullPack={() => {
           setShowWhatsAppModal(false);
-          setActiveSheet('ALL-PACK');
-          setTimeout(() => window.print(), 250);
+          handleExecutePrint({
+            scope: 'all-sheets',
+            singleSheetId: 'A-001',
+            selected3DView: 'all',
+            includedSheetIds: [
+              'A-000',
+              'A-001',
+              'A-002',
+              'A-003/006',
+              'A-008',
+              'S-001',
+              'P-001',
+              'E-001',
+              'Q-001',
+              '3D-PERSPECTIVES',
+            ],
+            orientation: 'landscape',
+          });
         }}
       />
 
@@ -897,9 +981,90 @@ export default function App() {
           BQ-CAD Site Working Drawings · 2-Bedroom Boys&apos; Quarters (12,000 × 11,000 mm) · Standard Nigerian Sandcrete Construction (225mm Ext / 150mm Int)
         </div>
         <div className="font-mono">
-          Sheets: A-000 · A-001 · A-002 · A-003–006 · A-008 · S-001 · P-001 · E-001 · Q-001
+          Sheets: A-000 · A-001 · A-002 · A-003–006 · A-008 · S-001 · P-001 · E-001 · Q-001 · A-301
         </div>
       </footer>
+      </div>
+
+      {/* ==================== PRINT & EXPORT DRAWING SET MODAL ==================== */}
+      <PrintDrawingModal
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        currentActiveSheet={activeSheet}
+        unit={unit}
+        config={siteConfig}
+        liveSnapshotDataUrl={live3DSnapshotUrl}
+        onExecutePrint={handleExecutePrint}
+      />
+
+      {/* ==================== DEDICATED PRINT MOUNT (ONLY RENDERED DURING PRINT) ==================== */}
+      <div id="print-mount" aria-hidden="true">
+        {printExecutionConfig?.scope === 'all-sheets' && (
+          <div className="space-y-6">
+            {[
+              'A-000',
+              'A-001',
+              'A-002',
+              'A-003/006',
+              'A-008',
+              'S-001',
+              'P-001',
+              'E-001',
+              'Q-001',
+              '3D-PERSPECTIVES',
+            ]
+              .filter((id) => printExecutionConfig.includedSheetIds.includes(id))
+              .map((id) => renderSheetComponent(id))}
+          </div>
+        )}
+
+        {printExecutionConfig?.scope === 'single-sheet' && (
+          <div>{renderSheetComponent(printExecutionConfig.singleSheetId)}</div>
+        )}
+
+        {printExecutionConfig?.scope === '3d-views' && (
+          <div>
+            <Perspective3DSheet
+              unit={unit}
+              config={siteConfig}
+              selectedView={printExecutionConfig.selected3DView}
+              liveSnapshotDataUrl={live3DSnapshotUrl}
+              sheetCode="A-301"
+            />
+          </div>
+        )}
+
+        {printExecutionConfig?.scope === 'current-sheet' && (
+          <div>
+            {activeSheet === '3D-MODEL' ? (
+              <Perspective3DSheet
+                unit={unit}
+                config={siteConfig}
+                selectedView="all"
+                liveSnapshotDataUrl={live3DSnapshotUrl}
+                sheetCode="A-301"
+              />
+            ) : activeSheet === 'ALL-PACK' ? (
+              <div className="space-y-6">
+                {[
+                  'A-000',
+                  'A-001',
+                  'A-002',
+                  'A-003/006',
+                  'A-008',
+                  'S-001',
+                  'P-001',
+                  'E-001',
+                  'Q-001',
+                  '3D-PERSPECTIVES',
+                ].map((id) => renderSheetComponent(id))}
+              </div>
+            ) : (
+              renderSheetComponent(activeSheet)
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
